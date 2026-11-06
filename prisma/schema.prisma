@@ -1,0 +1,264 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 1. Users (Admin, Staff, Super Admin)
+model User {
+  id           String      @id @default(cuid())
+  username     String      @unique
+  passwordHash String
+  fullName     String
+  email        String?
+  role         String      @default("STAFF") // SUPER_ADMIN, ADMIN, STAFF
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  auditLogs    AuditLog[]
+}
+
+// 2. Academic Years
+model AcademicYear {
+  id           String        @id @default(cuid())
+  year         String        @unique // e.g. "2570"
+  title        String        // e.g. "ประจำปีการศึกษา 2570"
+  isActive     Boolean       @default(true)
+  startDate    DateTime?
+  endDate      DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  applications Application[]
+}
+
+// 3. Admission Levels
+model AdmissionLevel {
+  id           String        @id @default(cuid())
+  code         String        @unique // "VCS_DIRECT", "VCS_TRANS", "VC"
+  name         String        // "ระดับ ปวส. (สายตรง)", "ระดับ ปวส. (ม.6/ปวช. ต่างสาขา)", "ระดับ ปวช."
+  category     String        // "ปวช." or "ปวส."
+  sortOrder    Int           @default(1)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  departments  Department[]
+  applications Application[]
+}
+
+// 4. Departments (สาขาวิชา)
+model Department {
+  id               String          @id @default(cuid())
+  code             String          @unique // e.g. "AUTO", "ELEC", "MECH"
+  name             String          // e.g. "สาขาวิชาช่างยนต์"
+  levelId          String
+  level            AdmissionLevel  @relation(fields: [levelId], references: [id])
+  quotaTarget      Int             @default(30)
+  totalTarget      Int             @default(40)
+  sortOrder        Int             @default(1)
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  primaryApps      Application[]   @relation("PrimaryDepartment")
+  secondaryApps    Application[]   @relation("SecondaryDepartment")
+}
+
+// 5. Applicants (Person entity)
+model Applicant {
+  id           String        @id @default(cuid())
+  citizenId    String        @unique // 13 digits
+  prefix       String        @default("นาย") // นาย, นางสาว, ด.ช., ด.ญ.
+  firstName    String
+  lastName     String
+  fullName     String
+  birthDay     Int
+  birthMonth   String
+  birthYear    Int           // Thai Buddhist Year e.g. 2552
+  phone        String
+  email        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  applications Application[]
+}
+
+// 6. Applications (Admission records)
+model Application {
+  id                String            @id @default(cuid())
+  applicationNo     String            @unique // e.g. "APP-2570-0001"
+  trackingCode      String            @unique // e.g. "TL68-X7K2"
+  applicantId       String
+  applicant         Applicant         @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  academicYearId    String
+  academicYear      AcademicYear      @relation(fields: [academicYearId], references: [id])
+  levelId           String
+  level             AdmissionLevel    @relation(fields: [levelId], references: [id])
+  primaryDeptId     String
+  primaryDept       Department        @relation("PrimaryDepartment", fields: [primaryDeptId], references: [id])
+  secondaryDeptId   String?
+  secondaryDept     Department?       @relation("SecondaryDepartment", fields: [secondaryDeptId], references: [id])
+  status            String            @default("SUBMITTED") 
+  // SUBMITTED (ส่งใบสมัครเรียบร้อยแล้ว)
+  // PENDING_REVIEW (รอเจ้าหน้าที่ตรวจสอบ)
+  // DOC_INCOMPLETE (เอกสารไม่ครบถ้วน)
+  // DOC_RESUBMIT (รอแก้ไขเอกสาร)
+  // DOC_APPROVED (เอกสารผ่านการตรวจสอบ)
+  // PASSED (ผ่านการคัดเลือก)
+  // REJECTED (ไม่ผ่านการคัดเลือก)
+  // RESERVED (สำรอง)
+  // PENDING_ENROLLMENT (รอดำเนินการมอบตัว)
+  // ENROLLED (มอบตัวเรียบร้อยแล้ว)
+  
+  photoUrl          String?           // 1 inch photo
+  signatureData     String?           // electronic signature canvas data url
+  signerName        String?           // ชื่อผู้ลงนาม
+  signDateDay       Int?
+  signDateMonth     String?
+  signDateYear      Int?
+
+  reviewNotes       String?
+  selectionNotes    String?
+  reserveOrder      Int?
+  isPublished       Boolean           @default(false)
+  submittedAt       DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  parentInfo        ParentInfo?
+  address           Address?
+  education         EducationHistory?
+  documents         Document[]
+  enrollment        Enrollment?
+  notifications     Notification[]
+}
+
+// 7. Parents (ข้อ 2 บิดา, ข้อ 3 มารดา)
+model ParentInfo {
+  id             String      @id @default(cuid())
+  applicationId  String      @unique
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  fatherName     String
+  fatherAge      Int?
+  fatherJob      String?
+  motherName     String
+  motherAge      Int?
+  motherJob      String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+// 8. Addresses (ข้อ 4 ที่อยู่ปัจจุบัน)
+model Address {
+  id             String      @id @default(cuid())
+  applicationId  String      @unique
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  houseNo        String
+  moo            String?
+  soi            String?
+  road           String?
+  subdistrict    String
+  district       String
+  province       String
+  postalCode     String
+  phone          String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+// 9. Education History (ข้อ 5 ข้อมูลการศึกษาปัจจุบัน)
+model EducationHistory {
+  id                  String      @id @default(cuid())
+  applicationId       String      @unique
+  application         Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  currentLevel        String      // ม.3, ม.6, ปวช.3, etc.
+  schoolName          String      // ชื่อโรงเรียน
+  schoolAddressNo     String?     // ตั้งอยู่เลขที่
+  schoolSubdistrict   String?     // ตำบล
+  schoolDistrict      String?     // อำเภอ
+  schoolProvince      String      // จังหวัด
+  gpax                Float       // ผลการเรียนเฉลี่ยสะสม
+  major               String?     // แผนการเรียน หรือ สาขาวิชา
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+}
+
+// 10. Documents (หลักฐานประกอบการสมัคร)
+model Document {
+  id             String           @id @default(cuid())
+  applicationId  String
+  application    Application      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  docType        String           // "PHOTO", "TRANSCRIPT", "ID_HOUSE", "CERTIFICATE"
+  title          String
+  fileUrl        String           // base64 data url or storage path
+  fileName       String
+  fileSize       Int
+  mimeType       String
+  status         String           @default("PENDING") // PENDING, APPROVED, REJECTED, RESUBMIT
+  rejectReason   String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  reviews        DocumentReview[]
+}
+
+// 11. Document Reviews
+model DocumentReview {
+  id          String    @id @default(cuid())
+  documentId  String
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  reviewedBy  String
+  status      String
+  remarks     String?
+  createdAt   DateTime  @default(now())
+}
+
+// 12. Enrollments (ระบบมอบตัว)
+model Enrollment {
+  id               String      @id @default(cuid())
+  applicationId    String      @unique
+  application      Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  studentId        String?     // รหัสประจำตัวนักศึกษาใหม่
+  guardianName     String
+  guardianPhone    String
+  guardianRelation String?     // บิดา, มารดา, ผู้ปกครอง
+  witnessName      String?     // ข้อมูลพยาน
+  enrollmentDate   DateTime?
+  status           String      @default("PENDING") // PENDING, COMPLETED, CANCELLED
+  remarks          String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
+
+// 13. Notifications
+model Notification {
+  id             String       @id @default(cuid())
+  applicationId  String?
+  application    Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  channel        String       // "LINE", "EMAIL", "SYSTEM"
+  recipient      String
+  subject        String
+  message        String
+  status         String       @default("LOGGED") // SENT, FAILED, LOGGED
+  sentAt         DateTime     @default(now())
+}
+
+// 14. Audit Logs
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String   // LOGIN, UPDATE_STATUS, REVIEW_DOC, EXPORT, SEED, EDIT_APP
+  entity      String   // Application, Document, User, etc.
+  entityId    String?
+  details     String?  // JSON or text
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+}
+
+// 15. System Settings
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
