@@ -10,6 +10,11 @@ const nextConfig = {
     config.resolve.alias['@'] = path.resolve(__dirname, 'src');
     return config;
   },
+  experimental: {
+    outputFileTracingIncludes: {
+      '/**': ['./prisma/**/*'],
+    },
+  },
 };
 
 module.exports = nextConfig;

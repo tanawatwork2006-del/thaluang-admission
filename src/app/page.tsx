@@ -18,23 +18,73 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+const DEFAULT_LEVELS = [
+  {
+    id: 'lvl-pvc',
+    code: 'PVC',
+    name: 'ระดับ ปวช. (ประกาศนียบัตรวิชาชีพ)',
+    category: 'ปวช.',
+    sortOrder: 1,
+  },
+  {
+    id: 'lvl-pvs-direct',
+    code: 'PVS_DIRECT',
+    name: 'ระดับ ปวส. (สายตรง)',
+    category: 'ปวส.',
+    sortOrder: 2,
+  },
+  {
+    id: 'lvl-pvs-trans',
+    code: 'PVS_TRANS',
+    name: 'ระดับ ปวส. (ม.6/ปวช. ต่างสาขา)',
+    category: 'ปวส.',
+    sortOrder: 3,
+  },
+];
+
+const DEFAULT_DEPARTMENTS = [
+  { id: 'd-1', levelId: 'lvl-pvc', name: 'ช่างยนต์', quotaTarget: 40 },
+  { id: 'd-2', levelId: 'lvl-pvc', name: 'ช่างกลโรงงาน', quotaTarget: 35 },
+  { id: 'd-3', levelId: 'lvl-pvc', name: 'ช่างไฟฟ้ากำลัง', quotaTarget: 40 },
+  { id: 'd-4', levelId: 'lvl-pvc', name: 'ช่างอิเล็กทรอนิกส์', quotaTarget: 30 },
+  { id: 'd-5', levelId: 'lvl-pvs-direct', name: 'เทคนิคเครื่องกล (ยานยนต์)', quotaTarget: 30 },
+  { id: 'd-6', levelId: 'lvl-pvs-direct', name: 'ไฟฟ้ากำลัง', quotaTarget: 30 },
+  { id: 'd-7', levelId: 'lvl-pvs-trans', name: 'เทคโนโลยีธุรกิจดิจิทัล', quotaTarget: 25 },
+  { id: 'd-8', levelId: 'lvl-pvs-trans', name: 'การจัดการโลจิสติกส์', quotaTarget: 25 },
+];
+
 export default async function HomePage() {
-  const [academicYear, levels, departments, countApps] = await Promise.all([
-    prisma.academicYear.findFirst({
-      where: { isActive: true },
-      orderBy: { year: 'desc' },
-    }),
-    prisma.admissionLevel.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-    }),
-    prisma.department.findMany({
-      where: { isActive: true },
-      include: { level: true },
-      orderBy: [{ levelId: 'asc' }, { sortOrder: 'asc' }],
-    }),
-    prisma.application.count(),
-  ]);
+  let academicYear: any = null;
+  let levels: any[] = [];
+  let departments: any[] = [];
+  let countApps = 0;
+
+  try {
+    const [ay, lvls, depts, count] = await Promise.all([
+      prisma.academicYear.findFirst({
+        where: { isActive: true },
+        orderBy: { year: 'desc' },
+      }),
+      prisma.admissionLevel.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+      }),
+      prisma.department.findMany({
+        where: { isActive: true },
+        include: { level: true },
+        orderBy: [{ levelId: 'asc' }, { sortOrder: 'asc' }],
+      }),
+      prisma.application.count(),
+    ]);
+    academicYear = ay;
+    levels = lvls && lvls.length > 0 ? lvls : DEFAULT_LEVELS;
+    departments = depts && depts.length > 0 ? depts : DEFAULT_DEPARTMENTS;
+    countApps = count || 0;
+  } catch (err) {
+    console.error('Database connection error in HomePage:', err);
+    levels = DEFAULT_LEVELS;
+    departments = DEFAULT_DEPARTMENTS;
+  }
 
   const yearDisplay = academicYear ? academicYear.year : '2570';
 
